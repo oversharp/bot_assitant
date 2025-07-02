@@ -3,7 +3,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import sqlite3
 import os
 
-TOKEN = os.getenv("8058970516:AHH_cWxF8RfJ52W8tyzIkzWonIo-Q4ZXx78")  # Se obtiene desde las variables de entorno
+TOKEN = os.getenv("BOT_TOKEN")  # Se obtiene desde las variables de entorno
 
 # Conexión a la base de datos
 conn = sqlite3.connect("gastos.db", check_same_thread=False)
