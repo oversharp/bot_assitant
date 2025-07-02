@@ -4,11 +4,18 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import sqlite3
 import os
+import psycopg2
 
 TOKEN = os.getenv("BOT_TOKEN")  # Se obtiene desde las variables de entorno
 
 # Conexión a la base de datos
-conn = sqlite3.connect("gastos.db", check_same_thread=False)
+conn = psycopg2.connect(
+    host=os.getenv("DB_HOST"),
+    port=os.getenv("DB_PORT"),
+    dbname=os.getenv("DB_NAME"),
+    user=os.getenv("DB_USER"),
+    password=os.getenv("DB_PASS")
+)
 cursor = conn.cursor()
 
 cursor.execute("""
@@ -18,9 +25,11 @@ CREATE TABLE IF NOT EXISTS gastos (
     categoria TEXT,
     monto REAL,
     descripcion TEXT,
-    grupo_id INTEGER
+    grupo_id INTEGER,
+    fecha TEXT
 )
 """)
+
 conn.commit()
 
 # Carga de presupuesto
@@ -159,5 +168,7 @@ app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("gasto", gasto))
 app.add_handler(CommandHandler("resumen", resumen))
-
+app.add_handler(CommandHandler("reporte", reporte))
+app.add_handler(CommandHandler("reporte_anual", reporte_anual))
+app.add_handler(CommandHandler("historial", historial))
 app.run_polling()
