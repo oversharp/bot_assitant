@@ -23,7 +23,7 @@ cursor = conn.cursor()
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS gastos (
     id SERIAL PRIMARY KEY,
-    user TEXT,
+    nombre_usuario TEXT,
     categoria TEXT,
     monto REAL,
     descripcion TEXT,
@@ -64,11 +64,11 @@ async def gasto(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Categoría no válida.")
             return
         descripcion = ' '.join(context.args[2:]) or "-"
-        user = update.effective_user.first_name
+        nombre_usuario = update.effective_user.first_name
         grupo = update.effective_chat.id
         fecha = datetime.utcnow().isoformat()
-        cursor.execute("INSERT INTO gastos (user, categoria, monto, descripcion, grupo_id, fecha) VALUES (%s, %s, %s, %s, %s, %s)",
-                       (user, categoria, monto, descripcion, grupo, fecha))
+        cursor.execute("INSERT INTO gastos (nombre_usuario, categoria, monto, descripcion, grupo_id, fecha) VALUES (%s, %s, %s, %s, %s, %s)",
+               (nombre_usuario, categoria, monto, descripcion, grupo, fecha))
         conn.commit()
         await update.message.reply_text(f"✅ Gasto registrado: ${monto} en *{categoria}* ({descripcion})", parse_mode="Markdown")
     except:
@@ -78,11 +78,11 @@ async def ahorro(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         monto = float(context.args[0])
         descripcion = ' '.join(context.args[1:]) or "-"
-        user = update.effective_user.first_name
+        nombre_usuario = update.effective_user.first_name
         grupo = update.effective_chat.id
         fecha = datetime.utcnow().isoformat()
-        cursor.execute("INSERT INTO gastos (user, categoria, monto, descripcion, grupo_id, fecha) VALUES (%s, %s, %s, %s, %s, %s)",
-                       (user, "ahorro", monto, descripcion, grupo, fecha))
+        cursor.execute("INSERT INTO gastos (nombre_usuario, categoria, monto, descripcion, grupo_id, fecha) VALUES (%s, %s, %s, %s, %s, %s)",
+                       (nombre_usuario, "ahorro", monto, descripcion, grupo, fecha))
         conn.commit()
         await update.message.reply_text(f"💰 Aporte registrado: ${monto} a *ahorro* ({descripcion})", parse_mode="Markdown")
     except:
@@ -150,7 +150,7 @@ async def historial(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Uso correcto: /historial YYYY-MM-DD YYYY-MM-DD")
         return
     grupo = update.effective_chat.id
-    cursor.execute("SELECT fecha, categoria, monto, descripcion, user FROM gastos WHERE grupo_id=%s AND fecha BETWEEN %s AND %s ORDER BY fecha ASC", (grupo, fecha_ini, fecha_fin))
+    cursor.execute("SELECT fecha, categoria, monto, descripcion, nombre_usuario FROM gastos WHERE grupo_id=%s AND fecha BETWEEN %s AND %s ORDER BY fecha ASC", (grupo, fecha_ini, fecha_fin))
     filas = cursor.fetchall()
     if not filas:
         await update.message.reply_text("No hay gastos en ese rango.")
