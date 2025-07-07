@@ -93,7 +93,7 @@ async def resumen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cursor.execute("SELECT categoria, SUM(monto) FROM gastos WHERE grupo_id=%s GROUP BY categoria", (grupo,))
     datos = cursor.fetchall()
     if datos:
-    msg = "📊 *Resumen de gastos por categoría:*\n"
+        msg = "📊 *Resumen de gastos por categoría:*\n"
     for cat, total in datos:
         msg += f"• {cat}: ${total:.2f}\n"
     await update.message.reply_text(msg, parse_mode="Markdown")
