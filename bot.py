@@ -94,11 +94,11 @@ async def resumen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     datos = cursor.fetchall()
     if datos:
         msg = "📊 *Resumen de gastos por categoría:*\n"
-    for cat, total in datos:
-        msg += f"• {cat}: ${total:.2f}\n"
-    await update.message.reply_text(msg, parse_mode="Markdown")
-else:
-    await update.message.reply_text("No hay gastos registrados aún.")
+        for cat, total in datos:
+            msg += f"• {cat}: ${total:.2f}\n"
+        await update.message.reply_text(msg, parse_mode="Markdown")
+    else:
+        await update.message.reply_text("No hay gastos registrados aún.")
 
 async def reporte(update: Update, context: ContextTypes.DEFAULT_TYPE):
     hoy = datetime.utcnow().date()
