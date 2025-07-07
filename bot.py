@@ -1,14 +1,15 @@
+
 import csv
+import os
+import psycopg2
 from datetime import datetime, timedelta
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-import sqlite3
-import os
-import psycopg2
 
-TOKEN = os.getenv("BOT_TOKEN")  # Se obtiene desde las variables de entorno
+# Token desde variables de entorno
+TOKEN = os.getenv("BOT_TOKEN")
 
-# Conexión a la base de datos
+# Conexión a PostgreSQL desde Render
 conn = psycopg2.connect(
     host=os.getenv("DB_HOST"),
     port=os.getenv("DB_PORT"),
@@ -18,21 +19,21 @@ conn = psycopg2.connect(
 )
 cursor = conn.cursor()
 
+# Crear tabla si no existe
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS gastos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     user TEXT,
     categoria TEXT,
     monto REAL,
     descripcion TEXT,
-    grupo_id INTEGER,
+    grupo_id BIGINT,
     fecha TEXT
 )
 """)
-
 conn.commit()
 
-# Carga de presupuesto
+# Cargar presupuesto desde CSV
 def cargar_presupuestos():
     presupuestos = {}
     with open("presupuesto_config.csv", newline='', encoding='utf-8') as csvfile:
@@ -48,6 +49,7 @@ def cargar_presupuestos():
 
 presupuestos = cargar_presupuestos()
 
+# Comandos
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Hola, soy tu bot de gastos. Usa /gasto para registrar un gasto.")
 
@@ -55,84 +57,96 @@ async def gasto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         monto = float(context.args[0])
         categoria = context.args[1].lower()
+        if categoria == "ahorro":
+            await update.message.reply_text("⚠️ Usa /ahorro para registrar aportes a la categoría de ahorro.")
+            return
+        if categoria not in presupuestos:
+            await update.message.reply_text("❌ Categoría no válida.")
+            return
         descripcion = ' '.join(context.args[2:]) or "-"
         user = update.effective_user.first_name
         grupo = update.effective_chat.id
         fecha = datetime.utcnow().isoformat()
-        cursor.execute("INSERT INTO gastos (user, categoria, monto, descripcion, grupo_id) VALUES (?, ?, ?, ?, ?)",
+        cursor.execute("INSERT INTO gastos (user, categoria, monto, descripcion, grupo_id, fecha) VALUES (%s, %s, %s, %s, %s, %s)",
                        (user, categoria, monto, descripcion, grupo, fecha))
         conn.commit()
-
         await update.message.reply_text(f"✅ Gasto registrado: ${monto} en *{categoria}* ({descripcion})", parse_mode="Markdown")
     except:
         await update.message.reply_text("❌ Uso: /gasto <monto> <categoría> <descripción opcional>")
 
+async def ahorro(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        monto = float(context.args[0])
+        descripcion = ' '.join(context.args[1:]) or "-"
+        user = update.effective_user.first_name
+        grupo = update.effective_chat.id
+        fecha = datetime.utcnow().isoformat()
+        cursor.execute("INSERT INTO gastos (user, categoria, monto, descripcion, grupo_id, fecha) VALUES (%s, %s, %s, %s, %s, %s)",
+                       (user, "ahorro", monto, descripcion, grupo, fecha))
+        conn.commit()
+        await update.message.reply_text(f"💰 Aporte registrado: ${monto} a *ahorro* ({descripcion})", parse_mode="Markdown")
+    except:
+        await update.message.reply_text("❌ Uso: /ahorro <monto> <descripción opcional>")
+
 async def resumen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     grupo = update.effective_chat.id
-    cursor.execute("SELECT categoria, SUM(monto) FROM gastos WHERE grupo_id=? GROUP BY categoria", (grupo,))
+    cursor.execute("SELECT categoria, SUM(monto) FROM gastos WHERE grupo_id=%s GROUP BY categoria", (grupo,))
     datos = cursor.fetchall()
     if datos:
-        msg = "📊 *Resumen de gastos por categoría:*\n"
+        msg = "📊 *Resumen de gastos por categoría:*
+"
         for cat, total in datos:
-            msg += f"• {cat}: ${total:.2f}\n"
+            msg += f"• {cat}: ${total:.2f}
+"
         await update.message.reply_text(msg, parse_mode="Markdown")
     else:
         await update.message.reply_text("No hay gastos registrados aún.")
 
 async def reporte(update: Update, context: ContextTypes.DEFAULT_TYPE):
     hoy = datetime.utcnow().date()
-    inicio_semana = hoy - timedelta(days=hoy.weekday())  # lunes
+    inicio_semana = hoy - timedelta(days=hoy.weekday())
     inicio_mes = hoy.replace(day=1)
-
     grupo = update.effective_chat.id
-    cursor.execute("SELECT categoria, SUM(monto), fecha FROM gastos WHERE grupo_id=? GROUP BY categoria", (grupo,))
-    gastos_categoria = {}
-    for cat in presupuestos:
-        gastos_categoria[cat] = {"semanal": 0, "mensual": 0}
-
-    cursor.execute("SELECT categoria, monto, descripcion, user, ROWID, fecha FROM gastos WHERE grupo_id=?", (grupo,))
-    for row in cursor.fetchall():
-        cat, monto, *_ = row
-        if cat in gastos_categoria:
-            cursor.execute("SELECT fecha FROM gastos WHERE ROWID=?", (row[4],))
-            fecha_str = cursor.fetchone()[0]
-            fecha = datetime.fromisoformat(fecha_str).date() if fecha_str else hoy
-            if fecha >= inicio_semana:
-                gastos_categoria[cat]["semanal"] += monto
-            if fecha >= inicio_mes:
-                gastos_categoria[cat]["mensual"] += monto
-
-    msg = "📊 *Reporte Semanal/Mensual:*\n"
+    cursor.execute("SELECT categoria, monto, fecha FROM gastos WHERE grupo_id=%s", (grupo,))
+    gastos_categoria = {cat: {"semanal": 0, "mensual": 0} for cat in presupuestos}
+    for cat, monto, fecha_str in cursor.fetchall():
+        fecha = datetime.fromisoformat(fecha_str).date()
+        if fecha >= inicio_semana:
+            gastos_categoria[cat]["semanal"] += monto
+        if fecha >= inicio_mes:
+            gastos_categoria[cat]["mensual"] += monto
+    msg = "📊 *Reporte Semanal/Mensual:*
+"
     for cat, pres in presupuestos.items():
-        semanal = pres["semanal"]
-        mensual = pres["mensual"]
         g = gastos_categoria[cat]
-        if semanal is not None:
-            msg += f"• {cat} (S): ${semanal - g['semanal']:.2f} / ${semanal:.2f}\n"
-        elif mensual is not None:
-            msg += f"• {cat} (M): ${mensual - g['mensual']:.2f} / ${mensual:.2f}\n"
+        if pres["semanal"] is not None:
+            msg += f"• {cat} (S): ${pres['semanal'] - g['semanal']:.2f} / ${pres['semanal']:.2f}
+"
+        elif pres["mensual"] is not None:
+            msg += f"• {cat} (M): ${pres['mensual'] - g['mensual']:.2f} / ${pres['mensual']:.2f}
+"
     await update.message.reply_text(msg, parse_mode="Markdown")
 
 async def reporte_anual(update: Update, context: ContextTypes.DEFAULT_TYPE):
     inicio_ano = datetime.utcnow().replace(month=1, day=1).date()
     grupo = update.effective_chat.id
-    cursor.execute("SELECT categoria, monto, fecha FROM gastos WHERE grupo_id=?", (grupo,))
-    gastos_acum = {}
-    for row in cursor.fetchall():
-        cat, monto, fecha_str = row
+    cursor.execute("SELECT categoria, monto, fecha FROM gastos WHERE grupo_id=%s", (grupo,))
+    gastos_totales = {}
+    for cat, monto, fecha_str in cursor.fetchall():
         if cat not in presupuestos:
             continue
-        fecha = datetime.fromisoformat(fecha_str).date() if fecha_str else inicio_ano
+        fecha = datetime.fromisoformat(fecha_str).date()
         if fecha >= inicio_ano:
-            gastos_acum[cat] = gastos_acum.get(cat, 0) + monto
-
-    msg = "📅 *Reporte Anual:*\n"
+            gastos_totales[cat] = gastos_totales.get(cat, 0) + monto
+    msg = "📅 *Reporte Anual:*
+"
     for cat, pres in presupuestos.items():
         if pres["anual"] is None:
             continue
-        gasto = gastos_acum.get(cat, 0)
+        gasto = gastos_totales.get(cat, 0)
         restante = pres["anual"] - gasto
-        msg += f"• {cat}: ${restante:.2f} / ${pres['anual']:.2f}\n"
+        msg += f"• {cat}: ${restante:.2f} / ${pres['anual']:.2f}
+"
     await update.message.reply_text(msg, parse_mode="Markdown")
 
 async def historial(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -142,31 +156,24 @@ async def historial(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         await update.message.reply_text("❌ Uso correcto: /historial YYYY-MM-DD YYYY-MM-DD")
         return
-
     grupo = update.effective_chat.id
-    cursor.execute("""
-    SELECT fecha, categoria, monto, descripcion, user 
-    FROM gastos 
-    WHERE grupo_id=? AND fecha BETWEEN ? AND ?
-    ORDER BY fecha ASC
-    """, (grupo, fecha_ini, fecha_fin))
-
+    cursor.execute("SELECT fecha, categoria, monto, descripcion, user FROM gastos WHERE grupo_id=%s AND fecha BETWEEN %s AND %s ORDER BY fecha ASC", (grupo, fecha_ini, fecha_fin))
     filas = cursor.fetchall()
     if not filas:
         await update.message.reply_text("No hay gastos en ese rango.")
         return
-
-    msg = f"🧾 *Historial de gastos del {fecha_ini} al {fecha_fin}:*\n"
-    for f in filas:
-        fecha, cat, monto, desc, user = f
-        msg += f"{fecha} - ${monto:.2f} - {cat} ({desc}) - *{user}*\n"
+    msg = f"🧾 *Historial de gastos del {fecha_ini} al {fecha_fin}:*
+"
+    for fecha, cat, monto, desc, user in filas:
+        msg += f"{fecha} - ${monto:.2f} - {cat} ({desc}) - *{user}*
+"
     await update.message.reply_text(msg, parse_mode="Markdown")
 
-
-
+# Inicialización del bot
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("gasto", gasto))
+app.add_handler(CommandHandler("ahorro", ahorro))
 app.add_handler(CommandHandler("resumen", resumen))
 app.add_handler(CommandHandler("reporte", reporte))
 app.add_handler(CommandHandler("reporte_anual", reporte_anual))
