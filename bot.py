@@ -93,7 +93,7 @@ async def resumen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cursor.execute("SELECT categoria, SUM(monto) FROM gastos WHERE grupo_id=%s GROUP BY categoria", (grupo,))
     datos = cursor.fetchall()
     if datos:
-        msg = "📊 *Resumen de gastos por categoría:*\n"
+        msg = "📊 *Resumen de gastos por categoría:*\\n"
         for cat, total in datos:
             msg += f"• {cat}: ${total:.2f}\n"
         await update.message.reply_text(msg, parse_mode="Markdown")
@@ -117,9 +117,9 @@ async def reporte(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for cat, pres in presupuestos.items():
         g = gastos_categoria[cat]
         if pres["semanal"] is not None:
-            msg += f"• {cat} (S): ${pres['semanal'] - g['semanal']:.2f} / ${pres['semanal']:.2f}/n"
+            msg += f"• {cat} (S): ${pres['semanal'] - g['semanal']:.2f} / ${pres['semanal']:.2f}\n"
         elif pres["mensual"] is not None:
-            msg += f"• {cat} (M): ${pres['mensual'] - g['mensual']:.2f} / ${pres['mensual']:.2f}/n"
+            msg += f"• {cat} (M): ${pres['mensual'] - g['mensual']:.2f} / ${pres['mensual']:.2f}\n"
     await update.message.reply_text(msg, parse_mode="Markdown")
 
 async def reporte_anual(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -139,7 +139,7 @@ async def reporte_anual(update: Update, context: ContextTypes.DEFAULT_TYPE):
             continue
         gasto = gastos_totales.get(cat, 0)
         restante = pres["anual"] - gasto
-        msg += f"• {cat}: ${restante:.2f} / ${pres['anual']:.2f}/n"
+        msg += f"• {cat}: ${restante:.2f} / ${pres['anual']:.2f}\n"
     await update.message.reply_text(msg, parse_mode="Markdown")
 
 async def historial(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -155,9 +155,9 @@ async def historial(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not filas:
         await update.message.reply_text("No hay gastos en ese rango.")
         return
-    msg = f"🧾 *Historial de gastos del {fecha_ini} al {fecha_fin}:*/n"
+    msg = f"🧾 *Historial de gastos del {fecha_ini} al {fecha_fin}:*\n"
     for fecha, cat, monto, desc, user in filas:
-        msg += f"{fecha} - ${monto:.2f} - {cat} ({desc}) - *{user}*/n"
+        msg += f"{fecha} - ${monto:.2f} - {cat} ({desc}) - *{user}*\n"
     await update.message.reply_text(msg, parse_mode="Markdown")
 
 # Inicialización del bot
